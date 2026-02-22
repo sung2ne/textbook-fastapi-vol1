@@ -28,6 +28,9 @@ fake_items = [
 todos_db: dict[int, "Todo"] = {}
 todo_id_counter = 1
 
+orders_db: dict[int, "Order"] = {}
+order_id_counter = 1
+
 
 # ---- Pydantic 모델 ----
 
@@ -76,6 +79,43 @@ class Todo(BaseModel):
             ]
         }
     }
+
+
+# 중첩 모델 - 주문
+
+class OrderItem(BaseModel):
+    """주문 항목"""
+    product_name: str
+    quantity: int = Field(ge=1)
+    unit_price: float = Field(ge=0)
+
+    @property
+    def subtotal(self) -> float:
+        return self.quantity * self.unit_price
+
+
+class ShippingAddress(BaseModel):
+    """배송 주소"""
+    recipient: str = Field(description="수령인")
+    phone: str = Field(description="연락처")
+    address: str = Field(description="주소")
+    memo: str | None = Field(default=None, description="배송 메모")
+
+
+class OrderCreate(BaseModel):
+    """주문 생성 요청"""
+    items: list[OrderItem] = Field(min_length=1)
+    shipping: ShippingAddress
+
+
+class Order(BaseModel):
+    """주문 응답"""
+    id: int
+    items: list[OrderItem]
+    shipping: ShippingAddress
+    total: float
+    status: str
+    created_at: datetime
 
 
 # ---- API 엔드포인트 ----
@@ -230,3 +270,33 @@ def delete_todo(todo_id: int):
 
     deleted = todos_db.pop(todo_id)
     return {"message": "삭제되었습니다", "deleted": deleted}
+
+# 주문 API (중첩 모델)
+
+@app.post("/orders", response_model=Order, tags=["orders"])
+def create_order(order: OrderCreate):
+    """주문 생성"""
+    global order_id_counter
+
+    total = sum(item.quantity * item.unit_price for item in order.items)
+
+    new_order = Order(
+        id=order_id_counter,
+        items=order.items,
+        shipping=order.shipping,
+        total=total,
+        status="pending",
+        created_at=datetime.now()
+    )
+
+    orders_db[order_id_counter] = new_order
+    order_id_counter += 1
+
+    return new_order
+
+@app.get("/orders/{order_id}", response_model=Order, tags=["orders"])
+def read_order(order_id: int):
+    """주문 조회"""
+    if order_id not in orders_db:
+        return {"error": "주문을 찾을 수 없습니다"}
+    return orders_db[order_id]
