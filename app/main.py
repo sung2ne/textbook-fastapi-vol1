@@ -1,7 +1,8 @@
-from datetime import datetime
+import re
+from datetime import datetime, date
 from enum import Enum
 from fastapi import FastAPI, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 app = FastAPI(
     title="나의 첫 번째 API",
@@ -73,6 +74,79 @@ class UserInDB(BaseModel):
     is_active: bool = True
     created_at: datetime
     last_login: datetime | None = None
+
+
+# 회원가입 모델 (field_validator, model_validator)
+class SignupRequest(BaseModel):
+    username: str = Field(
+        min_length=3,
+        max_length=20,
+        description="영문, 숫자, 밑줄만 허용 (3~20자)"
+    )
+    email: str = Field(
+        pattern=r"^[\w.-]+@[\w.-]+\.\w+$",
+        description="유효한 이메일 주소"
+    )
+    password: str = Field(
+        min_length=8,
+        description="8자 이상, 영문+숫자+특수문자 포함"
+    )
+    password_confirm: str = Field(description="비밀번호 확인")
+    birth_date: date = Field(description="생년월일")
+    agree_terms: bool = Field(description="약관 동의")
+
+    @field_validator("username")
+    @classmethod
+    def username_valid(cls, v: str) -> str:
+        if not re.match(r"^[a-zA-Z0-9_]+$", v):
+            raise ValueError("username은 영문, 숫자, 밑줄만 허용됩니다")
+        if v[0].isdigit():
+            raise ValueError("username은 숫자로 시작할 수 없습니다")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("대문자를 포함해야 합니다")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("소문자를 포함해야 합니다")
+        if not re.search(r"\d", v):
+            raise ValueError("숫자를 포함해야 합니다")
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v):
+            raise ValueError("특수문자를 포함해야 합니다")
+        return v
+
+    @field_validator("birth_date")
+    @classmethod
+    def birth_date_valid(cls, v: date) -> date:
+        today = date.today()
+        age = today.year - v.year
+        if age < 14:
+            raise ValueError("14세 이상만 가입할 수 있습니다")
+        if age > 120:
+            raise ValueError("유효하지 않은 생년월일입니다")
+        return v
+
+    @field_validator("agree_terms")
+    @classmethod
+    def must_agree(cls, v: bool) -> bool:
+        if not v:
+            raise ValueError("약관에 동의해야 합니다")
+        return v
+
+    @model_validator(mode="after")
+    def passwords_match(self):
+        if self.password != self.password_confirm:
+            raise ValueError("비밀번호가 일치하지 않습니다")
+        return self
+
+
+class SignupResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    message: str
 
 
 # TODO 모델
@@ -203,6 +277,16 @@ def read_file(file_path: str):
 
 # 사용자 API (response_model 사용)
 
+@app.post("/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED, tags=["auth"])
+def signup(request: SignupRequest):
+    """회원가입"""
+    return {
+        "id": 1,
+        "username": request.username,
+        "email": request.email,
+        "message": "회원가입이 완료되었습니다"
+    }
+
 @app.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED, tags=["users"])
 def create_user(user: UserCreate):
     """사용자 생성"""
@@ -221,7 +305,7 @@ def create_user(user: UserCreate):
     users_db[user_id_counter] = new_user
     user_id_counter += 1
 
-    return new_user  # password가 있어도 response_model이 제외
+    return new_user
 
 @app.get("/users", response_model=list[UserResponse], tags=["users"])
 def read_users():
