@@ -1,14 +1,23 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+
+from app.logging_config import setup_logging
+from app.middleware import log_requests
 from app.routers import auth, users, posts, comments
 from app.config import settings
+
+# 로깅 설정
+setup_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 마이그레이션으로 테이블 관리하므로 여기서는 아무것도 안 함
+    logger.info("애플리케이션 시작")
     yield
+    logger.info("애플리케이션 종료")
 
 
 app = FastAPI(
@@ -26,6 +35,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 요청 로깅 미들웨어
+app.middleware("http")(log_requests)
 
 # 라우터 등록
 app.include_router(auth.router)

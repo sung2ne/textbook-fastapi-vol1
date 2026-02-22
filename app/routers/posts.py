@@ -1,3 +1,4 @@
+import logging
 from math import ceil
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session
@@ -5,6 +6,8 @@ from app.database import get_session
 from app.dependencies import get_current_active_user, Pagination
 from app.models import User, Post, PostCreate, PostUpdate, PostResponse, PostListResponse, PaginatedResponse
 from app.crud import post as post_crud
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -20,7 +23,12 @@ def create_post(
 
     **인증 필요**
     """
-    return post_crud.create_post(session, post, current_user.id)
+    logger.info(f"게시글 생성 요청: user_id={current_user.id}, title={post.title}")
+
+    created_post = post_crud.create_post(session, post, current_user.id)
+
+    logger.info(f"게시글 생성 완료: post_id={created_post.id}")
+    return created_post
 
 
 @router.get("", response_model=PaginatedResponse[PostListResponse])
