@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, status
 from pydantic import BaseModel, Field
 
 app = FastAPI(
@@ -10,12 +10,6 @@ app = FastAPI(
 )
 
 # ---- 가상 데이터베이스 ----
-
-fake_users_db = {
-    1: {"id": 1, "name": "홍길동", "email": "hong@example.com"},
-    2: {"id": 2, "name": "김철수", "email": "kim@example.com"},
-    3: {"id": 3, "name": "이영희", "email": "lee@example.com"},
-}
 
 fake_items = [
     {"id": 1, "name": "노트북", "category": "electronics", "price": 1500000},
@@ -31,6 +25,9 @@ todo_id_counter = 1
 orders_db: dict[int, "Order"] = {}
 order_id_counter = 1
 
+users_db: dict[int, "UserInDB"] = {}
+user_id_counter = 1
+
 
 # ---- Pydantic 모델 ----
 
@@ -40,12 +37,45 @@ class ItemCategory(str, Enum):
     food = "food"
 
 
+# 사용자 모델 (요청/응답 분리)
 class UserCreate(BaseModel):
+    """사용자 생성 요청"""
+    name: str = Field(min_length=2, max_length=50)
+    email: str = Field(pattern=r"^[\w.-]+@[\w.-]+\.\w+$")
+    password: str = Field(min_length=8)
+
+
+class UserUpdate(BaseModel):
+    """사용자 수정 요청"""
+    name: str | None = Field(default=None, min_length=2, max_length=50)
+    email: str | None = Field(default=None, pattern=r"^[\w.-]+@[\w.-]+\.\w+$")
+
+
+class UserResponse(BaseModel):
+    """사용자 응답 (password 제외)"""
+    id: int
     name: str
-    age: int
     email: str
+    created_at: datetime
 
 
+class UserDetailResponse(UserResponse):
+    """사용자 상세 응답"""
+    is_active: bool
+    last_login: datetime | None
+
+
+class UserInDB(BaseModel):
+    id: int
+    name: str
+    email: str
+    password: str
+    is_active: bool = True
+    created_at: datetime
+    last_login: datetime | None = None
+
+
+# TODO 모델
 class TodoCreate(BaseModel):
     """할 일 생성 요청"""
     title: str = Field(min_length=1, max_length=100, examples=["FastAPI 공부하기"])
@@ -81,8 +111,7 @@ class Todo(BaseModel):
     }
 
 
-# 중첩 모델 - 주문
-
+# 주문 모델 (중첩)
 class OrderItem(BaseModel):
     """주문 항목"""
     product_name: str
@@ -172,32 +201,58 @@ def search_items(q: str | None = None):
 def read_file(file_path: str):
     return {"file_path": file_path}
 
-@app.get("/users", tags=["users"])
+# 사용자 API (response_model 사용)
+
+@app.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED, tags=["users"])
+def create_user(user: UserCreate):
+    """사용자 생성"""
+    global user_id_counter
+
+    hashed_password = f"hashed_{user.password}"
+
+    new_user = UserInDB(
+        id=user_id_counter,
+        name=user.name,
+        email=user.email,
+        password=hashed_password,
+        created_at=datetime.now()
+    )
+
+    users_db[user_id_counter] = new_user
+    user_id_counter += 1
+
+    return new_user  # password가 있어도 response_model이 제외
+
+@app.get("/users", response_model=list[UserResponse], tags=["users"])
 def read_users():
-    """사용자 목록 조회"""
-    return {"users": []}
+    """사용자 목록"""
+    return list(users_db.values())
 
 @app.get("/users/me", tags=["users"])
 def read_current_user():
     return {"user": "현재 사용자"}
 
-@app.post("/users", tags=["users"])
-def create_user(user: UserCreate):
-    return {"message": f"{user.name}님이 등록되었습니다", "user": user}
-
-@app.put("/users/{user_id}", tags=["users"])
-def update_user(user_id: int, user: UserCreate):
-    return {
-        "user_id": user_id,
-        "updated_user": user
-    }
-
-@app.get("/users/{user_id}", tags=["users"])
+@app.get("/users/{user_id}", response_model=UserDetailResponse, tags=["users"])
 def read_user(user_id: int):
-    """특정 사용자 조회"""
-    if user_id in fake_users_db:
-        return fake_users_db[user_id]
-    return {"error": "사용자를 찾을 수 없습니다"}
+    """사용자 상세"""
+    if user_id not in users_db:
+        return {"error": "사용자를 찾을 수 없습니다"}
+    return users_db[user_id]
+
+@app.patch("/users/{user_id}", response_model=UserResponse, tags=["users"])
+def update_user(user_id: int, user: UserUpdate):
+    """사용자 수정"""
+    if user_id not in users_db:
+        return {"error": "사용자를 찾을 수 없습니다"}
+
+    stored_user = users_db[user_id]
+
+    if user.name is not None:
+        stored_user.name = user.name
+    if user.email is not None:
+        stored_user.email = user.email
+
+    return stored_user
 
 @app.get("/users/{user_id}/items", tags=["users"])
 def read_user_items(user_id: int, skip: int = 0, limit: int = 10):
