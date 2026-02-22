@@ -1,5 +1,5 @@
 from enum import Enum
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 
 app = FastAPI(
     title="나의 첫 번째 API",
@@ -13,6 +13,15 @@ fake_users_db = {
     2: {"id": 2, "name": "김철수", "email": "kim@example.com"},
     3: {"id": 3, "name": "이영희", "email": "lee@example.com"},
 }
+
+# 가상 아이템 데이터
+fake_items = [
+    {"id": 1, "name": "노트북", "category": "electronics", "price": 1500000},
+    {"id": 2, "name": "키보드", "category": "electronics", "price": 150000},
+    {"id": 3, "name": "청바지", "category": "clothing", "price": 80000},
+    {"id": 4, "name": "티셔츠", "category": "clothing", "price": 30000},
+    {"id": 5, "name": "사과", "category": "food", "price": 3000},
+]
 
 
 class ItemCategory(str, Enum):
@@ -35,18 +44,55 @@ def say_hello():
     description="저장된 모든 아이템의 목록을 반환합니다.",
     tags=["items"]
 )
-def read_items():
+def read_items(
+    skip: int = 0,
+    limit: int = Query(default=10, le=100),
+    q: str | None = Query(default=None, min_length=1, description="검색어"),
+    category: str | None = None,
+    min_price: int | None = None,
+    max_price: int | None = None,
+):
     """
-    모든 아이템 목록을 반환합니다.
+    아이템 목록을 조회합니다.
 
-    - 인증 필요 없음
-    - 최대 100개까지 반환
+    - skip: 건너뛸 개수
+    - limit: 가져올 개수 (최대 100)
+    - q: 이름 검색어
+    - category: 카테고리 필터
+    - min_price: 최소 가격
+    - max_price: 최대 가격
     """
-    return {"items": ["사과", "바나나", "오렌지"]}
+    results = fake_items
+
+    # 검색어 필터
+    if q:
+        results = [item for item in results if q in item["name"]]
+
+    # 카테고리 필터
+    if category:
+        results = [item for item in results if item["category"] == category]
+
+    # 가격 필터
+    if min_price is not None:
+        results = [item for item in results if item["price"] >= min_price]
+    if max_price is not None:
+        results = [item for item in results if item["price"] <= max_price]
+
+    # 페이지네이션
+    return {
+        "total": len(results),
+        "items": results[skip:skip + limit]
+    }
 
 @app.get("/items/{category}", tags=["items"])
 def read_items_by_category(category: ItemCategory):
     return {"category": category, "message": f"{category.value} 카테고리 아이템"}
+
+@app.get("/search", tags=["items"])
+def search_items(q: str | None = None):
+    if q:
+        return {"query": q, "results": [f"{q} 검색 결과"]}
+    return {"query": None, "results": []}
 
 @app.get("/files/{file_path:path}", tags=["files"])
 def read_file(file_path: str):
@@ -67,6 +113,14 @@ def read_user(user_id: int):
     if user_id in fake_users_db:
         return fake_users_db[user_id]
     return {"error": "사용자를 찾을 수 없습니다"}
+
+@app.get("/users/{user_id}/items", tags=["users"])
+def read_user_items(user_id: int, skip: int = 0, limit: int = 10):
+    return {
+        "user_id": user_id,
+        "skip": skip,
+        "limit": limit
+    }
 
 @app.get("/users/{user_id}/posts/{post_id}", tags=["users"])
 def read_user_post(user_id: int, post_id: int):
