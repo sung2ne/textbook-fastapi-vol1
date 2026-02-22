@@ -2,7 +2,7 @@ from math import ceil
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session
 from app.database import get_session
-from app.models import Comment, CommentCreate, CommentUpdate, CommentResponse
+from app.models import Comment, CommentCreate, CommentUpdate, CommentResponse, PaginatedResponse
 from app.crud import comment as comment_crud, post as post_crud
 from app.dependencies import Pagination
 
@@ -39,7 +39,7 @@ def create_comment(
     return comment_crud.create_comment(session, comment, post_id, current_user_id)
 
 
-@router.get("/posts/{post_id}/comments", response_model=dict)
+@router.get("/posts/{post_id}/comments", response_model=PaginatedResponse[CommentResponse])
 def read_comments(
     post_id: int,
     pagination: Pagination = Depends(),

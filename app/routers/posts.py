@@ -2,7 +2,7 @@ from math import ceil
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session
 from app.database import get_session
-from app.models import Post, PostCreate, PostUpdate, PostResponse, PostListResponse
+from app.models import Post, PostCreate, PostUpdate, PostResponse, PostListResponse, PaginatedResponse
 from app.crud import post as post_crud
 from app.dependencies import Pagination
 
@@ -29,7 +29,7 @@ def create_post(
     return post_crud.create_post(session, post, current_user_id)
 
 
-@router.get("", response_model=dict)
+@router.get("", response_model=PaginatedResponse[PostListResponse])
 def read_posts(
     pagination: Pagination = Depends(),
     session: Session = Depends(get_session)
