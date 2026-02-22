@@ -1,20 +1,20 @@
-from app.models import Todo
+from sqlmodel import SQLModel, Session, create_engine
+from app.config import DATABASE_URL
 
-# 인메모리 데이터 저장소
-todos_db: dict[int, Todo] = {}
-todo_id_counter: int = 1
-
-
-def get_next_id() -> int:
-    """다음 ID를 반환하고 카운터 증가"""
-    global todo_id_counter
-    current_id = todo_id_counter
-    todo_id_counter += 1
-    return current_id
+# 엔진 생성
+engine = create_engine(
+    DATABASE_URL,
+    echo=True,  # SQL 로그 출력 (개발용)
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+)
 
 
-def reset_db() -> None:
-    """테스트용: DB 초기화"""
-    global todos_db, todo_id_counter
-    todos_db = {}
-    todo_id_counter = 1
+def create_db_and_tables():
+    """데이터베이스와 테이블 생성"""
+    SQLModel.metadata.create_all(engine)
+
+
+def get_session():
+    """데이터베이스 세션 제공 (의존성)"""
+    with Session(engine) as session:
+        yield session
