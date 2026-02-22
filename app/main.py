@@ -1,5 +1,7 @@
+from datetime import datetime
 from enum import Enum
 from fastapi import FastAPI, Query
+from pydantic import BaseModel, Field
 
 app = FastAPI(
     title="나의 첫 번째 API",
@@ -7,14 +9,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# 가상의 데이터베이스
+# ---- 가상 데이터베이스 ----
+
 fake_users_db = {
     1: {"id": 1, "name": "홍길동", "email": "hong@example.com"},
     2: {"id": 2, "name": "김철수", "email": "kim@example.com"},
     3: {"id": 3, "name": "이영희", "email": "lee@example.com"},
 }
 
-# 가상 아이템 데이터
 fake_items = [
     {"id": 1, "name": "노트북", "category": "electronics", "price": 1500000},
     {"id": 2, "name": "키보드", "category": "electronics", "price": 150000},
@@ -24,11 +26,44 @@ fake_items = [
 ]
 
 
+# ---- Pydantic 모델 ----
+
 class ItemCategory(str, Enum):
     electronics = "electronics"
     clothing = "clothing"
     food = "food"
 
+
+class TodoCreate(BaseModel):
+    """할 일 생성 요청"""
+    title: str = Field(min_length=1, max_length=100, examples=["FastAPI 공부하기"])
+    description: str | None = Field(default=None, max_length=500)
+
+
+class Todo(BaseModel):
+    """할 일 응답"""
+    id: int
+    title: str
+    description: str | None
+    completed: bool = False
+    created_at: datetime
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "id": 1,
+                    "title": "FastAPI 공부하기",
+                    "description": "PART 04까지 완료하기",
+                    "completed": False,
+                    "created_at": "2024-01-01T10:00:00"
+                }
+            ]
+        }
+    }
+
+
+# ---- API 엔드포인트 ----
 
 @app.get("/")
 def read_root():
@@ -64,21 +99,15 @@ def read_items(
     """
     results = fake_items
 
-    # 검색어 필터
     if q:
         results = [item for item in results if q in item["name"]]
-
-    # 카테고리 필터
     if category:
         results = [item for item in results if item["category"] == category]
-
-    # 가격 필터
     if min_price is not None:
         results = [item for item in results if item["price"] >= min_price]
     if max_price is not None:
         results = [item for item in results if item["price"] <= max_price]
 
-    # 페이지네이션
     return {
         "total": len(results),
         "items": results[skip:skip + limit]
