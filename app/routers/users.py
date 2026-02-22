@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 from app.database import get_session
+from app.dependencies import get_current_active_user
 from app.models import User, UserCreate, UserResponse
 from app.crud import user as user_crud
 
@@ -28,6 +29,18 @@ def create_user(
         )
 
     return user_crud.create_user(session, user)
+
+
+@router.get("/me", response_model=UserResponse)
+def read_current_user(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    현재 로그인한 사용자 정보를 조회합니다.
+
+    **인증 필요**
+    """
+    return current_user
 
 
 @router.get("", response_model=list[UserResponse])
