@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me}
+      - DATABASE_URL=sqlite:///./data/board.db
+      - DEBUG=false
+    volumes:
+      - ./data:/app/data  # 데이터 영속화
+    restart: unless-stopped
