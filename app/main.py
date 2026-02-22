@@ -25,6 +25,9 @@ fake_items = [
     {"id": 5, "name": "사과", "category": "food", "price": 3000},
 ]
 
+todos_db: dict[int, "Todo"] = {}
+todo_id_counter = 1
+
 
 # ---- Pydantic 모델 ----
 
@@ -34,10 +37,22 @@ class ItemCategory(str, Enum):
     food = "food"
 
 
+class UserCreate(BaseModel):
+    name: str
+    age: int
+    email: str
+
+
 class TodoCreate(BaseModel):
     """할 일 생성 요청"""
     title: str = Field(min_length=1, max_length=100, examples=["FastAPI 공부하기"])
     description: str | None = Field(default=None, max_length=500)
+
+
+class TodoUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = None
+    completed: bool | None = None
 
 
 class Todo(BaseModel):
@@ -87,16 +102,6 @@ def read_items(
     min_price: int | None = None,
     max_price: int | None = None,
 ):
-    """
-    아이템 목록을 조회합니다.
-
-    - skip: 건너뛸 개수
-    - limit: 가져올 개수 (최대 100)
-    - q: 이름 검색어
-    - category: 카테고리 필터
-    - min_price: 최소 가격
-    - max_price: 최대 가격
-    """
     results = fake_items
 
     if q:
@@ -136,6 +141,17 @@ def read_users():
 def read_current_user():
     return {"user": "현재 사용자"}
 
+@app.post("/users", tags=["users"])
+def create_user(user: UserCreate):
+    return {"message": f"{user.name}님이 등록되었습니다", "user": user}
+
+@app.put("/users/{user_id}", tags=["users"])
+def update_user(user_id: int, user: UserCreate):
+    return {
+        "user_id": user_id,
+        "updated_user": user
+    }
+
 @app.get("/users/{user_id}", tags=["users"])
 def read_user(user_id: int):
     """특정 사용자 조회"""
@@ -157,3 +173,60 @@ def read_user_post(user_id: int, post_id: int):
         "user_id": user_id,
         "post_id": post_id
     }
+
+# TODO CRUD
+
+@app.post("/todos", response_model=Todo, tags=["todos"])
+def create_todo(todo: TodoCreate):
+    """할 일 생성"""
+    global todo_id_counter
+
+    new_todo = Todo(
+        id=todo_id_counter,
+        title=todo.title,
+        description=todo.description,
+        completed=False,
+        created_at=datetime.now()
+    )
+    todos_db[todo_id_counter] = new_todo
+    todo_id_counter += 1
+
+    return new_todo
+
+@app.get("/todos", tags=["todos"])
+def read_todos():
+    """할 일 목록 조회"""
+    return list(todos_db.values())
+
+@app.get("/todos/{todo_id}", tags=["todos"])
+def read_todo(todo_id: int):
+    """특정 할 일 조회"""
+    if todo_id not in todos_db:
+        return {"error": "할 일을 찾을 수 없습니다"}
+    return todos_db[todo_id]
+
+@app.put("/todos/{todo_id}", tags=["todos"])
+def update_todo(todo_id: int, todo: TodoUpdate):
+    """할 일 수정"""
+    if todo_id not in todos_db:
+        return {"error": "할 일을 찾을 수 없습니다"}
+
+    stored_todo = todos_db[todo_id]
+
+    if todo.title is not None:
+        stored_todo.title = todo.title
+    if todo.description is not None:
+        stored_todo.description = todo.description
+    if todo.completed is not None:
+        stored_todo.completed = todo.completed
+
+    return stored_todo
+
+@app.delete("/todos/{todo_id}", tags=["todos"])
+def delete_todo(todo_id: int):
+    """할 일 삭제"""
+    if todo_id not in todos_db:
+        return {"error": "할 일을 찾을 수 없습니다"}
+
+    deleted = todos_db.pop(todo_id)
+    return {"message": "삭제되었습니다", "deleted": deleted}
