@@ -2,7 +2,7 @@
 
 > **TODO 앱과 게시판으로 배우는 현대적 Python API 개발**
 
-이 저장소는 교재 [소설처럼 읽는 FastAPI Vol.1](https://wikidocs.net/book/18948)의 챕터별 실습 코드입니다.
+이 저장소는 교재 [소설처럼 읽는 FastAPI Vol.1](https://text.ibetter.kr/fastapi-vol1)의 챕터별 실습 코드입니다.
 
 ## 브랜치 구조
 
